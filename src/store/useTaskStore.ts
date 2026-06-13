@@ -3,9 +3,17 @@ import { persist } from 'zustand/middleware';
 import { Task, TaskStatus } from '../types';
 import { mockTasks } from '../utils/mockData';
 
+interface StatusHistoryEntry {
+  taskId: string;
+  previousStatus: TaskStatus;
+  newStatus: TaskStatus;
+  timestamp: string;
+}
+
 interface TaskState {
   tasks: Task[];
   loading: boolean;
+  statusHistory: StatusHistoryEntry[];
   fetchTasks: () => void;
   addTask: (task: Omit<Task, 'id' | 'createdAt'>) => void;
   updateTask: (id: string, data: Partial<Task>) => void;
@@ -13,6 +21,7 @@ interface TaskState {
   updateTaskStatus: (id: string, status: TaskStatus) => void;
   getClientTasks: (clientId: string) => Task[];
   getTasksByStatus: (status: TaskStatus) => Task[];
+  getTaskStatusHistory: (taskId: string) => StatusHistoryEntry[];
 }
 
 export const useTaskStore = create<TaskState>()(
@@ -20,6 +29,7 @@ export const useTaskStore = create<TaskState>()(
     (set, get) => ({
       tasks: mockTasks,
       loading: false,
+      statusHistory: [],
 
       fetchTasks: () => {
         set({ loading: true });
@@ -54,11 +64,25 @@ export const useTaskStore = create<TaskState>()(
       },
 
       updateTaskStatus: (id, status) => {
-        set((state) => ({
-          tasks: state.tasks.map((task) =>
-            task.id === id ? { ...task, status } : task
-          ),
-        }));
+        const task = get().tasks.find((t) => t.id === id);
+        if (task && task.status !== status) {
+          const historyEntry: StatusHistoryEntry = {
+            taskId: id,
+            previousStatus: task.status,
+            newStatus: status,
+            timestamp: new Date().toISOString(),
+          };
+          set((state) => ({
+            tasks: state.tasks.map((task) =>
+              task.id === id ? { ...task, status } : task
+            ),
+            statusHistory: [...state.statusHistory, historyEntry],
+          }));
+        }
+      },
+
+      getTaskStatusHistory: (taskId) => {
+        return get().statusHistory.filter((h) => h.taskId === taskId);
       },
 
       getClientTasks: (clientId) => {

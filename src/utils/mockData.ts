@@ -295,6 +295,16 @@ INTJ类型，独立思考者，善于长远规划和系统分析。
     status: 'sent',
     createdAt: '2024-01-21',
     updatedAt: '2024-01-23',
+    sentAt: '2024-01-23',
+    sentSummary: '您好，您的职业发展诊断报告已完成。报告中包含了对您职业兴趣、性格特点的分析，以及适合您的职业方向推荐。请查收。',
+    sendHistory: [
+      {
+        id: 'send-1',
+        sentAt: '2024-01-23',
+        summary: '您好，您的职业发展诊断报告已完成。报告中包含了对您职业兴趣、性格特点的分析，以及适合您的职业方向推荐。请查收。',
+        reportVersion: 'v1.0',
+      },
+    ],
   },
   {
     id: 'r2',
@@ -305,6 +315,7 @@ INTJ类型，独立思考者，善于长远规划和系统分析。
     status: 'draft',
     createdAt: '2024-01-26',
     updatedAt: '2024-01-26',
+    sendHistory: [],
   },
 ];
 
@@ -318,6 +329,10 @@ export const mockTasks: Task[] = [
     dueDate: '2024-02-15',
     status: 'in_progress',
     createdAt: '2024-01-23',
+    statusHistory: [
+      { status: 'todo', changedAt: '2024-01-23' },
+      { status: 'in_progress', changedAt: '2024-01-28' },
+    ],
   },
   {
     id: 't2',
@@ -328,6 +343,9 @@ export const mockTasks: Task[] = [
     dueDate: '2024-02-28',
     status: 'todo',
     createdAt: '2024-01-23',
+    statusHistory: [
+      { status: 'todo', changedAt: '2024-01-23' },
+    ],
   },
   {
     id: 't3',
@@ -338,6 +356,11 @@ export const mockTasks: Task[] = [
     dueDate: '2024-02-10',
     status: 'completed',
     createdAt: '2024-01-23',
+    statusHistory: [
+      { status: 'todo', changedAt: '2024-01-23' },
+      { status: 'in_progress', changedAt: '2024-01-30' },
+      { status: 'completed', changedAt: '2024-02-05' },
+    ],
   },
   {
     id: 't4',
@@ -347,6 +370,10 @@ export const mockTasks: Task[] = [
     dueDate: '2024-02-20',
     status: 'in_progress',
     createdAt: '2024-01-29',
+    statusHistory: [
+      { status: 'todo', changedAt: '2024-01-29' },
+      { status: 'in_progress', changedAt: '2024-02-01' },
+    ],
   },
   {
     id: 't5',
@@ -356,6 +383,10 @@ export const mockTasks: Task[] = [
     dueDate: '2024-02-15',
     status: 'completed',
     createdAt: '2024-01-29',
+    statusHistory: [
+      { status: 'todo', changedAt: '2024-01-29' },
+      { status: 'completed', changedAt: '2024-02-08' },
+    ],
   },
   {
     id: 't6',
@@ -365,6 +396,9 @@ export const mockTasks: Task[] = [
     dueDate: '2024-03-01',
     status: 'todo',
     createdAt: '2024-01-29',
+    statusHistory: [
+      { status: 'todo', changedAt: '2024-01-29' },
+    ],
   },
 ];
 

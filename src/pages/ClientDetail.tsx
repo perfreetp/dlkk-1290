@@ -109,6 +109,20 @@ export default function ClientDetail() {
   const latestAssessment = clientAssessments.find((a) => a.status === 'completed' && a.result);
   const sentReports = clientReports.filter((r) => r.status === 'sent' && r.sentAt);
   const latestSentReport = sentReports[0];
+  
+  const allSendHistory: { reportId: string; reportTitle: string; sendRecord: any }[] = [];
+  clientReports.forEach(r => {
+    if (r.sendHistory && r.sendHistory.length > 0) {
+      r.sendHistory.forEach(record => {
+        allSendHistory.push({
+          reportId: r.id,
+          reportTitle: r.title,
+          sendRecord: record,
+        });
+      });
+    }
+  });
+  allSendHistory.sort((a, b) => new Date(b.sendRecord.sentAt).getTime() - new Date(a.sendRecord.sentAt).getTime());
 
   const timeline: TimelineItem[] = [];
   
@@ -247,17 +261,42 @@ export default function ClientDetail() {
   });
   
   clientTasks.forEach(t => {
+    const statusLabels: Record<string, string> = {
+      todo: '待开始',
+      in_progress: '进行中',
+      completed: '已完成'
+    };
+    const lastStatusChange = t.statusHistory?.length > 0 
+      ? t.statusHistory[t.statusHistory.length - 1].changedAt 
+      : t.createdAt;
+    
     timeline.push({
       id: t.id,
       type: 'task',
       title: t.title,
-      date: t.dueDate,
+      date: lastStatusChange,
       icon: Target,
-      color: 'green',
-      status: t.status === 'completed' ? '已完成' : t.status === 'in_progress' ? '进行中' : '待开始',
+      color: t.status === 'completed' ? 'green' : t.status === 'in_progress' ? 'amber' : 'gray',
+      status: statusLabels[t.status],
+      details: `截止 ${t.dueDate}`,
       expandedContent: (
-        <div className="p-4 bg-gray-50 rounded-xl">
+        <div className="space-y-3 p-4 bg-gray-50 rounded-xl">
           <p className="text-sm text-gray-700">{t.description}</p>
+          {t.statusHistory && t.statusHistory.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <p className="text-xs text-gray-500 mb-2">状态变更记录</p>
+              <div className="space-y-2">
+                {t.statusHistory.map((history, idx) => (
+                  <div key={idx} className="flex items-center gap-3 text-xs">
+                    <div className="w-2 h-2 rounded-full bg-gray-300" />
+                    <span className="text-gray-600">{history.changedAt}</span>
+                    <span className="text-gray-400">→</span>
+                    <span className="font-medium text-gray-700">{statusLabels[history.status]}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ),
     });
@@ -266,30 +305,119 @@ export default function ClientDetail() {
   timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const getNextSteps = () => {
-    const steps: { priority: number; action: string; description: string }[] = [];
+    const steps: { priority: number; action: string; description: string; detail?: string }[] = [];
     
-    if (clientAssessments.filter(a => a.status === 'completed').length === 0) {
-      steps.push({ priority: 1, action: '发放测评', description: '建议先进行职业兴趣测评，了解来访者职业倾向' });
+    const completedAssessments = clientAssessments.filter(a => a.status === 'completed');
+    const latestInterview = clientInterviews[0];
+    
+    if (completedAssessments.length > 0 && latestAssessment?.result) {
+      const scores = latestAssessment.result.scores;
+      const maxScore = scores.reduce((max, s) => s.score > max.score ? s : max, scores[0]);
+      const minScore = scores.reduce((min, s) => s.score < min.score ? s : min, scores[0]);
+      
+      if (maxScore && minScore) {
+        steps.push({ 
+          priority: 1, 
+          action: '关注优势发挥', 
+          description: `最近测评显示 "${maxScore.dimension}" 得分最高 (${maxScore.score}分)`,
+          detail: `建议重点发展和利用这项优势进行职业探索`
+        });
+        
+        if (minScore.dimension !== maxScore.dimension) {
+          steps.push({ 
+            priority: 2, 
+            action: '提升短板领域', 
+            description: `"${minScore.dimension}" 得分较低 (${minScore.score}分)`,
+            detail: `可作为探索任务的一部分进行针对性提升`
+          });
+        }
+      }
     }
     
-    if (clientInterviews.length === 0) {
-      steps.push({ priority: 2, action: '安排访谈', description: '进行初次访谈，了解来访者职业困惑和诉求' });
+    if (latestInterview) {
+      steps.push({ 
+        priority: 3, 
+        action: '跟进访谈结论', 
+        description: `最近访谈 (${latestInterview.interviewDate}) 聚焦于：`,
+        detail: latestInterview.confusionTypes.join('、')
+      });
+    }
+    
+    if (clientAssessments.filter(a => a.status === 'completed').length === 0) {
+      steps.unshift({ 
+        priority: 0, 
+        action: '发放测评', 
+        description: '建议先进行职业兴趣测评，了解来访者职业倾向',
+        detail: '完成测评后再安排访谈效果更佳'
+      });
+    }
+    
+    if (clientInterviews.length === 0 && completedAssessments.length > 0) {
+      steps.unshift({ 
+        priority: 0, 
+        action: '安排访谈', 
+        description: '已完成测评，建议进行初次访谈，深入了解来访者诉求',
+        detail: undefined
+      });
     }
     
     if (latestReport?.status === 'draft') {
-      steps.push({ priority: 3, action: '完成报告', description: '继续撰写诊断报告内容' });
+      steps.push({ 
+        priority: 4, 
+        action: '完成报告', 
+        description: `报告 "${latestReport.title}" 仍在草稿状态`,
+        detail: `当前推荐方向：${latestReport.careerRecommendations.length}个`
+      });
     }
     
     if (latestReport?.status === 'completed' && !latestSentReport) {
-      steps.push({ priority: 4, action: '发送报告', description: '将完成的报告发送给来访者' });
+      steps.push({ 
+        priority: 5, 
+        action: '发送报告', 
+        description: '报告已完成，建议发送给来访者',
+        detail: '发送后来访者可及时了解诊断结果和建议'
+      });
     }
     
     if (pendingTasks.length > 0) {
-      steps.push({ priority: 5, action: '跟进任务', description: `有${pendingTasks.length}个任务待完成，记得跟进` });
+      const overdueTasks = pendingTasks.filter(t => new Date(t.dueDate) < new Date());
+      const urgentTasks = pendingTasks.filter(t => {
+        const dueDate = new Date(t.dueDate);
+        const threeDaysLater = new Date();
+        threeDaysLater.setDate(threeDaysLater.getDate() + 3);
+        return dueDate <= threeDaysLater && dueDate >= new Date();
+      });
+      
+      if (overdueTasks.length > 0) {
+        steps.push({ 
+          priority: 6, 
+          action: '⚠️ 逾期任务', 
+          description: `有 ${overdueTasks.length} 个任务已逾期未完成`,
+          detail: overdueTasks.map(t => t.title).join('、')
+        });
+      }
+      
+      if (urgentTasks.length > 0) {
+        steps.push({ 
+          priority: 7, 
+          action: '📅 即将到期', 
+          description: `有 ${urgentTasks.length} 个任务即将到期`,
+          detail: urgentTasks.map(t => `${t.title} (${t.dueDate})`).join('、')
+        });
+      }
+      
+      if (overdueTasks.length === 0 && urgentTasks.length === 0) {
+        steps.push({ 
+          priority: 8, 
+          action: '📋 待完成任务', 
+          description: `${pendingTasks.length} 个探索任务待完成`,
+          detail: pendingTasks.slice(0, 2).map(t => t.title).join('、') + (pendingTasks.length > 2 ? '...' : '')
+        });
+      }
     }
     
     if (steps.length === 0) {
-      steps.push({ priority: 0, action: '持续跟进', description: '当前阶段任务已完成，保持定期跟进' });
+      steps.push({ priority: 0, action: '✨ 状态良好', description: '当前阶段任务都已完成或正常推进中', detail: '继续保持定期跟进' });
     }
     
     return steps.sort((a, b) => a.priority - b.priority);
@@ -384,17 +512,24 @@ export default function ClientDetail() {
           <div className="border-t border-gray-100 pt-4">
             <p className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-[#f5a623]" />
-              下一步建议
+              智能提醒
             </p>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {nextSteps.map((step, index) => (
-                <div key={index} className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-[#f5a623] text-white text-xs flex items-center justify-center font-medium flex-shrink-0">
-                    {step.priority}
+                <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
+                  <span className={`w-6 h-6 rounded-full text-white text-xs flex items-center justify-center font-medium flex-shrink-0 ${
+                    step.action.includes('⚠️') ? 'bg-red-500' : 
+                    step.action.includes('📅') ? 'bg-amber-500' : 
+                    step.action.includes('✨') ? 'bg-green-500' : 'bg-[#f5a623]'
+                  }`}>
+                    {index + 1}
                   </span>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-800">{step.action}</p>
-                    <p className="text-sm text-gray-500">{step.description}</p>
+                    <p className="text-sm text-gray-600 mt-0.5">{step.description}</p>
+                    {step.detail && (
+                      <p className="text-xs text-gray-400 mt-1">{step.detail}</p>
+                    )}
                   </div>
                 </div>
               ))}
@@ -417,29 +552,29 @@ export default function ClientDetail() {
               </div>
 
               <div className="mt-6 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-gray-100 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg flex-shrink-0">
                     <Phone className="w-4 h-4 text-gray-600" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-gray-500">联系电话</p>
                     <p className="text-sm font-medium text-gray-800">{client.phone}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-gray-100 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg flex-shrink-0">
                     <Mail className="w-4 h-4 text-gray-600" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-gray-500">电子邮箱</p>
-                    <p className="text-sm font-medium text-gray-800">{client.email}</p>
+                    <p className="text-sm font-medium text-gray-800 truncate">{client.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-gray-100 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-gray-100 rounded-lg flex-shrink-0">
                     <Calendar className="w-4 h-4 text-gray-600" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs text-gray-500">创建时间</p>
                     <p className="text-sm font-medium text-gray-800">{client.createdAt}</p>
                   </div>
@@ -514,14 +649,14 @@ export default function ClientDetail() {
             </Card>
           )}
 
-          {sentReports.length > 0 && (
+          {allSendHistory.length > 0 && (
             <Card className="border-green-200 bg-green-50/50">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Send className="w-5 h-5 text-green-600" />
                     <h3 className="font-semibold text-gray-800">发送记录</h3>
-                    <Badge variant="success">{sentReports.length}次</Badge>
+                    <Badge variant="success">{allSendHistory.length}次</Badge>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => setShowSendHistoryModal(true)}>
                     查看全部 <ChevronRight className="w-4 h-4 ml-1" />
@@ -529,12 +664,15 @@ export default function ClientDetail() {
                 </div>
               </CardHeader>
               <CardContent>
-                {latestSentReport && (
+                {allSendHistory[0] && (
                   <div className="p-3 bg-white rounded-xl">
                     <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-gray-500">最近发送于 {latestSentReport.sentAt}</p>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="info" size="sm">{allSendHistory[0].sendRecord.reportVersion}</Badge>
+                        <p className="text-xs text-gray-500">发送于 {allSendHistory[0].sendRecord.sentAt}</p>
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-700 line-clamp-2">{latestSentReport.sentSummary}</p>
+                    <p className="text-sm text-gray-700 line-clamp-2">{allSendHistory[0].sendRecord.summary}</p>
                   </div>
                 )}
               </CardContent>
@@ -620,23 +758,24 @@ export default function ClientDetail() {
         size="lg"
       >
         <div className="p-6">
-          {sentReports.length === 0 ? (
+          {allSendHistory.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-sm text-gray-500">暂无发送记录</p>
             </div>
           ) : (
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {sentReports.map((report) => (
-                <div key={report.id} className="p-4 bg-gray-50 rounded-xl">
+              {allSendHistory.map((item, index) => (
+                <div key={item.sendRecord.id} className="p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center justify-between mb-2">
                     <div>
-                      <p className="font-medium text-gray-800">{report.title}</p>
-                      <p className="text-xs text-gray-500">发送于 {report.sentAt}</p>
+                      <p className="font-medium text-gray-800">{item.reportTitle}</p>
+                      <p className="text-xs text-gray-500">版本 {item.sendRecord.reportVersion}</p>
                     </div>
+                    <Badge variant="success">{item.sendRecord.sentAt}</Badge>
                   </div>
-                  {report.sentSummary && (
+                  {item.sendRecord.summary && (
                     <div className="mt-2 p-3 bg-white rounded-lg">
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{report.sentSummary}</p>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.sendRecord.summary}</p>
                     </div>
                   )}
                 </div>

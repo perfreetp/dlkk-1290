@@ -21,6 +21,19 @@ export type TaskStatus = 'todo' | 'in_progress' | 'completed';
 export type AppointmentStatus = 'scheduled' | 'completed' | 'cancelled';
 export type AppointmentMethod = 'offline' | 'online';
 
+export interface TaskStatusHistory {
+  status: TaskStatus;
+  changedAt: string;
+  note?: string;
+}
+
+export interface ReportSendRecord {
+  id: string;
+  sentAt: string;
+  summary: string;
+  reportVersion: string;
+}
+
 export interface Client {
   id: string;
   name: string;
@@ -100,6 +113,7 @@ export interface Report {
   updatedAt: string;
   sentAt?: string;
   sentSummary?: string;
+  sendHistory: ReportSendRecord[];
 }
 
 export interface Task {
@@ -111,6 +125,7 @@ export interface Task {
   dueDate: string;
   status: TaskStatus;
   createdAt: string;
+  statusHistory: TaskStatusHistory[];
 }
 
 export interface Appointment {

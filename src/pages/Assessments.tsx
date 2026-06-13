@@ -216,9 +216,24 @@ export default function Assessments() {
                           )}
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-gray-400">
-                        发放于 {assessment.sentAt}
-                        {assessment.completedAt && ` · 完成于 ${assessment.completedAt}`}
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-xs text-gray-400">
+                          发放于 {assessment.sentAt}
+                          {assessment.completedAt && ` · 完成于 ${assessment.completedAt}`}
+                        </div>
+                        {assessment.result && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <span className="text-gray-500">得分：</span>
+                            {assessment.result.scores.slice(0, 3).map((score, idx) => (
+                              <span key={idx} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                                {score.dimension.split('(')[0]}: {score.score}
+                              </span>
+                            ))}
+                            {assessment.result.scores.length > 3 && (
+                              <span className="text-gray-400">+{assessment.result.scores.length - 3}</span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );

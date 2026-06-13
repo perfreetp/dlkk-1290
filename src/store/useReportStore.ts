@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Report, CareerRecommendation } from '../types';
+import { Report, CareerRecommendation, ReportSendRecord } from '../types';
 import { mockReports } from '../utils/mockData';
 
 type NewReportData = {
@@ -72,19 +72,29 @@ export const useReportStore = create<ReportState>()(
       },
 
       sendReport: (id, summary?: string) => {
-        set((state) => ({
-          reports: state.reports.map((report) =>
-            report.id === id && report.status !== 'draft'
-              ? { 
-                  ...report, 
-                  status: 'sent', 
-                  sentAt: new Date().toISOString().split('T')[0],
-                  sentSummary: summary || '',
-                  updatedAt: new Date().toISOString().split('T')[0] 
-                }
-              : report
-          ),
-        }));
+        const report = get().reports.find(r => r.id === id);
+        if (report && report.status !== 'draft') {
+          const sendRecord: ReportSendRecord = {
+            id: `send-${Date.now()}`,
+            sentAt: new Date().toISOString().split('T')[0],
+            summary: summary || '',
+            reportVersion: `v${(report.sendHistory?.length || 0) + 1}.0`,
+          };
+          set((state) => ({
+            reports: state.reports.map((r) =>
+              r.id === id
+                ? { 
+                    ...r, 
+                    status: 'sent', 
+                    sentAt: sendRecord.sentAt,
+                    sentSummary: summary || '',
+                    sendHistory: [...(r.sendHistory || []), sendRecord],
+                    updatedAt: new Date().toISOString().split('T')[0] 
+                  }
+                : r
+            ),
+          }));
+        }
       },
 
       addCareerRecommendation: (reportId, recommendation) => {
