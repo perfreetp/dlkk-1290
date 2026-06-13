@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, X, Star, Trash2, Save, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Plus, X, Star, Trash2, Save, CheckCircle, Edit2 } from 'lucide-react';
 import { useReportStore } from '../store/useReportStore';
 import { useClientStore } from '../store/useClientStore';
 import { Report, CareerRecommendation } from '../types';
@@ -8,6 +8,12 @@ import { Input, Textarea, Select } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { Card, CardContent } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
+
+interface EditableRecommendation extends Omit<CareerRecommendation, 'id'> {
+  id: string;
+  isNew?: boolean;
+  isEditing?: boolean;
+}
 
 export default function ReportNew() {
   const navigate = useNavigate();
@@ -22,7 +28,7 @@ export default function ReportNew() {
     content: '',
   });
 
-  const [recommendations, setRecommendations] = useState<Omit<CareerRecommendation, 'id'>[]>([]);
+  const [recommendations, setRecommendations] = useState<EditableRecommendation[]>([]);
   const [newRec, setNewRec] = useState({
     careerName: '',
     matchScore: 80,
@@ -42,10 +48,9 @@ export default function ReportNew() {
       });
       setRecommendations(
         existingReport.careerRecommendations.map((rec) => ({
-          careerName: rec.careerName,
-          matchScore: rec.matchScore,
-          reason: rec.reason,
-          explorationTasks: rec.explorationTasks,
+          ...rec,
+          isNew: false,
+          isEditing: false,
         }))
       );
     }
@@ -53,7 +58,16 @@ export default function ReportNew() {
 
   const handleAddRecommendation = () => {
     if (newRec.careerName && newRec.reason) {
-      setRecommendations([...recommendations, { ...newRec }]);
+      const newRecommendation: EditableRecommendation = {
+        id: `new-${Date.now()}`,
+        careerName: newRec.careerName,
+        matchScore: newRec.matchScore,
+        reason: newRec.reason,
+        explorationTasks: newRec.explorationTasks.filter(t => t.trim() !== ''),
+        isNew: true,
+        isEditing: false,
+      };
+      setRecommendations([...recommendations, newRecommendation]);
       setNewRec({
         careerName: '',
         matchScore: 80,
@@ -63,28 +77,76 @@ export default function ReportNew() {
     }
   };
 
-  const handleRemoveRecommendation = (index: number) => {
-    setRecommendations(recommendations.filter((_, i) => i !== index));
+  const handleRemoveRecommendation = (id: string) => {
+    setRecommendations(recommendations.filter((r) => r.id !== id));
   };
 
-  const handleAddTask = () => {
+  const handleEditRecommendation = (id: string) => {
+    setRecommendations(recommendations.map(r => 
+      r.id === id ? { ...r, isEditing: true } : r
+    ));
+  };
+
+  const handleCancelEdit = (id: string) => {
+    if (recommendations.find(r => r.id === id)?.isNew) {
+      handleRemoveRecommendation(id);
+    } else {
+      const original = existingReport?.careerRecommendations.find(r => r.id === id);
+      if (original) {
+        setRecommendations(recommendations.map(r => 
+          r.id === id ? { ...original, isNew: false, isEditing: false } : r
+        ));
+      } else {
+        setRecommendations(recommendations.map(r => 
+          r.id === id ? { ...r, isEditing: false } : r
+        ));
+      }
+    }
+  };
+
+  const handleUpdateRecommendation = (id: string, field: keyof CareerRecommendation, value: any) => {
+    setRecommendations(recommendations.map(r => 
+      r.id === id ? { ...r, [field]: value } : r
+    ));
+  };
+
+  const handleAddTask = (recId: string) => {
+    setRecommendations(recommendations.map(r => 
+      r.id === recId ? { ...r, explorationTasks: [...r.explorationTasks, ''] } : r
+    ));
+  };
+
+  const handleRemoveTask = (recId: string, taskIndex: number) => {
+    setRecommendations(recommendations.map(r => 
+      r.id === recId ? { ...r, explorationTasks: r.explorationTasks.filter((_, i) => i !== taskIndex) } : r
+    ));
+  };
+
+  const handleTaskChange = (recId: string, taskIndex: number, value: string) => {
+    setRecommendations(recommendations.map(r => 
+      r.id === recId ? { ...r, explorationTasks: r.explorationTasks.map((t, i) => i === taskIndex ? value : t) } : r
+    ));
+  };
+
+  const handleAddNewTask = () => {
     setNewRec({
       ...newRec,
       explorationTasks: [...newRec.explorationTasks, ''],
     });
   };
 
-  const handleRemoveTask = (index: number) => {
+  const handleRemoveNewTask = (index: number) => {
     setNewRec({
       ...newRec,
       explorationTasks: newRec.explorationTasks.filter((_, i) => i !== index),
     });
   };
 
-  const handleTaskChange = (index: number, value: string) => {
-    const newTasks = [...newRec.explorationTasks];
-    newTasks[index] = value;
-    setNewRec({ ...newRec, explorationTasks: newTasks });
+  const handleNewTaskChange = (index: number, value: string) => {
+    setNewRec({
+      ...newRec,
+      explorationTasks: newRec.explorationTasks.map((t, i) => i === index ? value : t),
+    });
   };
 
   const handleSave = (status: 'draft' | 'completed') => {
@@ -92,25 +154,28 @@ export default function ReportNew() {
 
     setTimeout(() => {
       const filteredRecommendations = recommendations
-        .map((r) => ({
-          ...r,
-          explorationTasks: r.explorationTasks.filter((t) => t.trim() !== ''),
-        }))
-        .filter((r) => r.careerName.trim() !== '');
+        .filter(r => r.careerName.trim() !== '')
+        .map((rec, index) => ({
+          careerName: rec.careerName,
+          matchScore: rec.matchScore,
+          reason: rec.reason,
+          explorationTasks: rec.explorationTasks.filter(t => t.trim() !== ''),
+          id: rec.isNew ? `cr${Date.now()}-${index}` : rec.id,
+        }));
 
       if (isEditMode && existingReport) {
         updateReport(existingReport.id, {
-          ...formData,
-          careerRecommendations: filteredRecommendations.map((rec) => ({
-            ...rec,
-            id: existingReport.careerRecommendations.find((r) => r.careerName === rec.careerName)?.id || 
-               `cr${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          })),
+          clientId: formData.clientId,
+          title: formData.title,
+          content: formData.content,
+          careerRecommendations: filteredRecommendations,
           status,
         });
       } else {
         addReport({
-          ...formData,
+          clientId: formData.clientId,
+          title: formData.title,
+          content: formData.content,
           careerRecommendations: filteredRecommendations,
           status,
         });
@@ -193,33 +258,110 @@ export default function ReportNew() {
               <h3 className="font-semibold text-gray-800 mb-4">职业推荐</h3>
 
               <div className="space-y-4">
-                {recommendations.map((rec, index) => (
-                  <div key={index} className="p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Star className="w-4 h-4 text-[#f5a623]" />
-                        <span className="font-medium text-gray-800">{rec.careerName}</span>
+                {recommendations.map((rec) => (
+                  <div key={rec.id} className="p-3 bg-gray-50 rounded-xl">
+                    {rec.isEditing ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-blue-600 font-medium">编辑中</span>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleCancelEdit(rec.id)}
+                              className="p-1 hover:bg-gray-200 rounded text-xs text-gray-500"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        </div>
+                        <Input
+                          label="职业名称"
+                          value={rec.careerName}
+                          onChange={(e) => handleUpdateRecommendation(rec.id, 'careerName', e.target.value)}
+                        />
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            匹配度: {rec.matchScore}%
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={rec.matchScore}
+                            onChange={(e) => handleUpdateRecommendation(rec.id, 'matchScore', parseInt(e.target.value))}
+                            className="w-full"
+                          />
+                        </div>
+                        <Textarea
+                          label="推荐理由"
+                          value={rec.reason}
+                          onChange={(e) => handleUpdateRecommendation(rec.id, 'reason', e.target.value)}
+                          rows={2}
+                        />
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium text-gray-700">探索任务</label>
+                            <Button type="button" variant="ghost" size="sm" onClick={() => handleAddTask(rec.id)}>
+                              <Plus className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            {rec.explorationTasks.map((task, taskIndex) => (
+                              <div key={taskIndex} className="flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={task}
+                                  onChange={(e) => handleTaskChange(rec.id, taskIndex, e.target.value)}
+                                  className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
+                                />
+                                {rec.explorationTasks.length > 1 && (
+                                  <button
+                                    onClick={() => handleRemoveTask(rec.id, taskIndex)}
+                                    className="p-2 hover:bg-gray-200 rounded-lg"
+                                  >
+                                    <X className="w-4 h-4 text-gray-400" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveRecommendation(index)}
-                        className="p-1 hover:bg-gray-200 rounded transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4 text-gray-400" />
-                      </button>
-                    </div>
-                    <Badge variant="success" size="sm">
-                      {rec.matchScore}% 匹配
-                    </Badge>
-                    <p className="text-xs text-gray-600 mt-2">{rec.reason}</p>
-                    {rec.explorationTasks.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {rec.explorationTasks.map((task, i) => (
-                          <Badge key={i} size="sm" variant="info">
-                            {task}
-                          </Badge>
-                        ))}
-                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Star className="w-4 h-4 text-[#f5a623]" />
+                            <span className="font-medium text-gray-800">{rec.careerName}</span>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleEditRecommendation(rec.id)}
+                              className="p-1 hover:bg-gray-200 rounded"
+                            >
+                              <Edit2 className="w-4 h-4 text-gray-500" />
+                            </button>
+                            <button
+                              onClick={() => handleRemoveRecommendation(rec.id)}
+                              className="p-1 hover:bg-gray-200 rounded"
+                            >
+                              <Trash2 className="w-4 h-4 text-gray-400" />
+                            </button>
+                          </div>
+                        </div>
+                        <Badge variant="success" size="sm">
+                          {rec.matchScore}% 匹配
+                        </Badge>
+                        <p className="text-xs text-gray-600 mt-2">{rec.reason}</p>
+                        {rec.explorationTasks.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {rec.explorationTasks.map((task, i) => (
+                              <Badge key={i} size="sm" variant="info">
+                                {task}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -265,7 +407,7 @@ export default function ReportNew() {
                         type="button"
                         variant="ghost"
                         size="sm"
-                        onClick={handleAddTask}
+                        onClick={handleAddNewTask}
                       >
                         <Plus className="w-3 h-3" />
                       </Button>
@@ -276,14 +418,14 @@ export default function ReportNew() {
                           <input
                             type="text"
                             value={task}
-                            onChange={(e) => handleTaskChange(index, e.target.value)}
+                            onChange={(e) => handleNewTaskChange(index, e.target.value)}
                             placeholder="探索任务..."
-                            className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]/20"
+                            className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
                           />
                           {newRec.explorationTasks.length > 1 && (
                             <button
                               type="button"
-                              onClick={() => handleRemoveTask(index)}
+                              onClick={() => handleRemoveNewTask(index)}
                               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                             >
                               <X className="w-4 h-4 text-gray-400" />

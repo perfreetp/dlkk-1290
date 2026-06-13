@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { Send, CheckCircle, Clock, AlertCircle, History, Copy, Check, PlayCircle, Link as LinkIcon, AlertTriangle } from 'lucide-react';
+import { Send, CheckCircle, Clock, AlertCircle, History, Copy, Check, PlayCircle, Link as LinkIcon, AlertTriangle, Eye } from 'lucide-react';
 import { useAssessmentStore } from '../store/useAssessmentStore';
 import { useClientStore } from '../store/useClientStore';
 import { ASSESSMENT_TYPES, AssessmentType, Assessment } from '../types';
@@ -24,12 +24,12 @@ export default function Assessments() {
   const [showSendModal, setShowSendModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [showLinkModal, setShowLinkModal] = useState(false);
-  const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [comparisonClientId, setComparisonClientId] = useState<string>('');
+  const [comparisonTypeId, setComparisonTypeId] = useState<string>('');
 
   const getClient = (clientId: string) => {
     return clients.find((c) => c.id === clientId);
@@ -39,8 +39,21 @@ export default function Assessments() {
     if (selectedClient && selectedType) {
       const assessmentType = ASSESSMENT_TYPES.find((t) => t.id === selectedType);
       if (assessmentType) {
+        const newAssessment = {
+          id: `a${Date.now()}`,
+          clientId: selectedClient,
+          assessmentType,
+          sentAt: new Date().toISOString().split('T')[0],
+          status: 'pending' as const,
+        };
         sendAssessment(selectedClient, assessmentType);
+        setSelectedAssessment({
+          ...newAssessment,
+          assessmentType,
+        });
         setShowSendModal(false);
+        setShowLinkModal(true);
+        setCopiedLink(false);
         setSelectedClient('');
         setSelectedType('');
       }
@@ -50,12 +63,6 @@ export default function Assessments() {
   const handleViewResult = (assessment: Assessment) => {
     setSelectedAssessment(assessment);
     setShowResultModal(true);
-  };
-
-  const handleShowLink = (assessment: Assessment) => {
-    setSelectedAssessment(assessment);
-    setShowLinkModal(true);
-    setCopiedLink(false);
   };
 
   const handleCopyLink = () => {
@@ -70,16 +77,29 @@ export default function Assessments() {
   const handleSimulateComplete = () => {
     if (selectedAssessment) {
       completeAssessment(selectedAssessment.id);
-      setShowCompleteModal(false);
+      const updatedAssessment = assessments.find(a => a.id === selectedAssessment.id) || selectedAssessment;
       setShowLinkModal(false);
-      setSelectedAssessment(null);
+      setSelectedAssessment({
+        ...updatedAssessment,
+        status: 'completed',
+        completedAt: new Date().toISOString().split('T')[0],
+        result: {
+          id: `ar${Date.now()}`,
+          assessmentId: selectedAssessment.id,
+          scores: selectedAssessment.assessmentType.dimensions.map((dim) => ({
+            dimension: dim,
+            score: Math.floor(Math.random() * 40) + 50,
+          })),
+          interpretation: '测评完成，详见详细报告',
+          createdAt: new Date().toISOString().split('T')[0],
+        },
+      });
+      setShowResultModal(true);
     }
   };
 
-  const completedAssessments = assessments.filter((a) => a.status === 'completed');
-
-  const clientComparisonAssessments = comparisonClientId
-    ? assessments.filter((a) => a.clientId === comparisonClientId && a.status === 'completed')
+  const clientComparisonAssessments = comparisonClientId && comparisonTypeId
+    ? assessments.filter((a) => a.clientId === comparisonClientId && a.status === 'completed' && a.assessmentType.id === comparisonTypeId)
     : [];
 
   const getComparisonData = () => {
@@ -91,20 +111,21 @@ export default function Assessments() {
     if (!firstResult || !lastResult) return null;
 
     return firstResult.scores.map((score, index) => ({
-      name: score.dimension.replace(/[()RISEAC]/g, '').substring(0, 4),
+      name: score.dimension.substring(0, 6),
       首次: score.score,
       最近: lastResult.scores[index]?.score || 0,
     }));
   };
 
   const comparisonData = getComparisonData();
+  const completedCount = assessments.filter((a) => a.status === 'completed').length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">测评中心</h1>
-          <p className="text-gray-500 mt-1">管理测评量表，发放和查看测评结果</p>
+          <p className="text-gray-500 mt-1">管理测评量表，发放和查看测评结果 · 已完成 {completedCount} 次测评</p>
         </div>
         <Button variant="primary" onClick={() => setShowSendModal(true)}>
           <Send className="w-4 h-4" />
@@ -185,7 +206,11 @@ export default function Assessments() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleShowLink(assessment)}
+                              onClick={() => {
+                                setSelectedAssessment(assessment);
+                                setShowLinkModal(true);
+                                setCopiedLink(false);
+                              }}
                             >
                               <LinkIcon className="w-3.5 h-3.5" />
                             </Button>
@@ -196,7 +221,7 @@ export default function Assessments() {
                               size="sm"
                               onClick={() => handleViewResult(assessment)}
                             >
-                              查看结果
+                              <Eye className="w-3.5 h-3.5" />
                             </Button>
                           )}
                         </div>
@@ -216,19 +241,33 @@ export default function Assessments() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-gray-600" />
               <h2 className="font-semibold text-gray-800">历史对比</h2>
             </div>
-            <Select
-              value={comparisonClientId}
-              onChange={(e) => setComparisonClientId(e.target.value)}
-              options={[
-                { value: '', label: '选择来访者...' },
-                ...clients.map((c) => ({ value: c.id, label: c.name })),
-              ]}
-            />
+            <div className="flex items-center gap-2">
+              <Select
+                value={comparisonClientId}
+                onChange={(e) => {
+                  setComparisonClientId(e.target.value);
+                  setComparisonTypeId('');
+                }}
+                options={[
+                  { value: '', label: '选择来访者...' },
+                  ...clients.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+              <Select
+                value={comparisonTypeId}
+                onChange={(e) => setComparisonTypeId(e.target.value)}
+                options={[
+                  { value: '', label: '选择量表...' },
+                  ...ASSESSMENT_TYPES.map((t) => ({ value: t.id, label: t.name })),
+                ]}
+                disabled={!comparisonClientId}
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -237,9 +276,19 @@ export default function Assessments() {
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
                 <AlertTriangle className="w-8 h-8 text-gray-400" />
               </div>
-              <h3 className="text-lg font-medium text-gray-800 mb-2">请选择来访者</h3>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">请选择来访者和量表</h3>
               <p className="text-sm text-gray-500">
-                选择一位来访者查看其测评历史对比
+                选择同一来访者、同一量表的多次测评进行对比
+              </p>
+            </div>
+          ) : !comparisonTypeId ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">请选择量表类型</h3>
+              <p className="text-sm text-gray-500">
+                选择同一量表的测评才能进行有效对比
               </p>
             </div>
           ) : clientComparisonAssessments.length < 2 ? (
@@ -249,7 +298,10 @@ export default function Assessments() {
               </div>
               <h3 className="text-lg font-medium text-gray-800 mb-2">数据不足</h3>
               <p className="text-sm text-gray-500">
-                {getClient(comparisonClientId)?.name} 至少需要完成2次测评才能进行对比
+                {getClient(comparisonClientId)?.name} 的 {ASSESSMENT_TYPES.find(t => t.id === comparisonTypeId)?.name}
+              </p>
+              <p className="text-sm text-gray-500 mt-1">
+                至少需要完成 2 次该量表测评才能进行对比
               </p>
               <p className="text-xs text-gray-400 mt-2">
                 当前完成 {clientComparisonAssessments.length} 次测评
@@ -268,6 +320,9 @@ export default function Assessments() {
                   <Line type="monotone" dataKey="最近" stroke="#1e3a5f" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
+              <div className="mt-4 text-center text-xs text-gray-400">
+                对比 {clientComparisonAssessments[0].completedAt} 和 {clientComparisonAssessments[clientComparisonAssessments.length - 1].completedAt} 的测评结果
+              </div>
             </div>
           ) : null}
         </CardContent>
@@ -307,7 +362,7 @@ export default function Assessments() {
               onClick={handleSendAssessment}
               disabled={!selectedClient || !selectedType}
             >
-              发放测评
+              发放并获取链接
             </Button>
           </div>
         </div>
@@ -315,7 +370,10 @@ export default function Assessments() {
 
       <Modal
         isOpen={showLinkModal}
-        onClose={() => setShowLinkModal(false)}
+        onClose={() => {
+          setShowLinkModal(false);
+          setSelectedAssessment(null);
+        }}
         title="测评链接"
         size="md"
       >
@@ -363,29 +421,33 @@ export default function Assessments() {
               </div>
             </div>
 
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-4">
-              <div className="flex items-start gap-3">
-                <PlayCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <p className="font-medium text-blue-800 text-sm">模拟完成测评</p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    点击下方按钮可模拟来访者完成测评，自动生成测评结果
-                  </p>
+            {selectedAssessment.status === 'pending' && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+                <div className="flex items-start gap-3">
+                  <PlayCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-blue-800 text-sm">模拟完成测评</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      点击下方按钮可模拟来访者完成测评，自动生成测评结果并打开结果查看
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div className="flex items-center justify-end gap-3">
-              <Button variant="ghost" onClick={() => setShowLinkModal(false)}>
+              <Button variant="ghost" onClick={() => {
+                setShowLinkModal(false);
+                setSelectedAssessment(null);
+              }}>
                 关闭
               </Button>
-              <Button
-                variant="primary"
-                onClick={handleSimulateComplete}
-              >
-                <PlayCircle className="w-4 h-4" />
-                模拟完成
-              </Button>
+              {selectedAssessment.status === 'pending' && (
+                <Button variant="primary" onClick={handleSimulateComplete}>
+                  <PlayCircle className="w-4 h-4" />
+                  模拟完成并查看结果
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -393,7 +455,10 @@ export default function Assessments() {
 
       <Modal
         isOpen={showResultModal}
-        onClose={() => setShowResultModal(false)}
+        onClose={() => {
+          setShowResultModal(false);
+          setSelectedAssessment(null);
+        }}
         title="测评结果"
         size="lg"
       >

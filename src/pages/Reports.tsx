@@ -47,7 +47,7 @@ export default function Reports() {
 
   const handleSendConfirm = () => {
     if (selectedReport && selectedReport.status !== 'draft') {
-      sendReport(selectedReport.id);
+      sendReport(selectedReport.id, sendMessage);
       setShowSendModal(false);
       setSelectedReport(null);
       setSendMessage('');

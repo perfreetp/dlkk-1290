@@ -18,7 +18,7 @@ interface ReportState {
   addReport: (report: NewReportData) => void;
   updateReport: (id: string, data: Partial<Report>) => void;
   deleteReport: (id: string) => void;
-  sendReport: (id: string) => void;
+  sendReport: (id: string, summary?: string) => void;
   addCareerRecommendation: (reportId: string, recommendation: Omit<CareerRecommendation, 'id'>) => void;
   removeCareerRecommendation: (reportId: string, recommendationId: string) => void;
   getClientReports: (clientId: string) => Report[];
@@ -69,7 +69,7 @@ export const useReportStore = create<ReportState>()(
         }));
       },
 
-      sendReport: (id) => {
+      sendReport: (id, summary?: string) => {
         set((state) => ({
           reports: state.reports.map((report) =>
             report.id === id && report.status !== 'draft'
@@ -77,6 +77,7 @@ export const useReportStore = create<ReportState>()(
                   ...report, 
                   status: 'sent', 
                   sentAt: new Date().toISOString().split('T')[0],
+                  sentSummary: summary || '',
                   updatedAt: new Date().toISOString().split('T')[0] 
                 }
               : report

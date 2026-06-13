@@ -99,6 +99,7 @@ export interface Report {
   createdAt: string;
   updatedAt: string;
   sentAt?: string;
+  sentSummary?: string;
 }
 
 export interface Task {
