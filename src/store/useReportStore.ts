@@ -72,8 +72,13 @@ export const useReportStore = create<ReportState>()(
       sendReport: (id) => {
         set((state) => ({
           reports: state.reports.map((report) =>
-            report.id === id
-              ? { ...report, status: 'sent', updatedAt: new Date().toISOString().split('T')[0] }
+            report.id === id && report.status !== 'draft'
+              ? { 
+                  ...report, 
+                  status: 'sent', 
+                  sentAt: new Date().toISOString().split('T')[0],
+                  updatedAt: new Date().toISOString().split('T')[0] 
+                }
               : report
           ),
         }));

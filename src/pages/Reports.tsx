@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, FileText, Send, Edit, Eye, Trash2, Star } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, FileText, Send, Edit, Eye, Trash2, Star, AlertCircle } from 'lucide-react';
 import { useReportStore } from '../store/useReportStore';
 import { useClientStore } from '../store/useClientStore';
 import { Report } from '../types';
@@ -9,6 +9,7 @@ import { Badge } from '../components/common/Badge';
 import { Button } from '../components/common/Button';
 import { Avatar } from '../components/common/Avatar';
 import { Modal } from '../components/common/Modal';
+import { Textarea } from '../components/common/Input';
 
 const statusConfig = {
   draft: { label: '草稿', variant: 'warning' as const },
@@ -21,7 +22,9 @@ export default function Reports() {
   const { clients } = useClientStore();
   const { sendReport, deleteReport } = useReportStore();
   const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [sendMessage, setSendMessage] = useState('');
 
   const getClient = (clientId: string) => {
     return clients.find((c) => c.id === clientId);
@@ -32,9 +35,22 @@ export default function Reports() {
     setShowPreviewModal(true);
   };
 
-  const handleSend = (reportId: string) => {
-    if (window.confirm('确定要发送此报告给来访者吗？')) {
-      sendReport(reportId);
+  const handleEdit = (report: Report) => {
+    window.location.href = `/reports/${report.id}`;
+  };
+
+  const handleSendClick = (report: Report) => {
+    setSelectedReport(report);
+    setShowSendModal(true);
+    setSendMessage(`您好，您的职业发展诊断报告已完成。报告中包含了对您职业兴趣、性格特点的分析，以及适合您的职业方向推荐。请查收。`);
+  };
+
+  const handleSendConfirm = () => {
+    if (selectedReport && selectedReport.status !== 'draft') {
+      sendReport(selectedReport.id);
+      setShowSendModal(false);
+      setSelectedReport(null);
+      setSendMessage('');
     }
   };
 
@@ -82,6 +98,7 @@ export default function Reports() {
           {reports.map((report) => {
             const client = getClient(report.clientId);
             const isDraft = report.status === 'draft';
+            const canSend = report.status === 'completed';
 
             return (
               <Card key={report.id}>
@@ -127,7 +144,7 @@ export default function Reports() {
 
                       <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                         <span className="text-xs text-gray-400">
-                          更新于 {report.updatedAt}
+                          {report.sentAt ? `发送于 ${report.sentAt}` : `更新于 ${report.updatedAt}`}
                         </span>
                         <div className="flex items-center gap-2">
                           <Button
@@ -138,23 +155,33 @@ export default function Reports() {
                             <Eye className="w-4 h-4" />
                             预览
                           </Button>
-                          {!isDraft && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(report)}
+                          >
+                            <Edit className="w-4 h-4" />
+                            编辑
+                          </Button>
+                          {canSend && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleSend(report.id)}
+                              onClick={() => handleSendClick(report)}
                             >
                               <Send className="w-4 h-4" />
                               发送
                             </Button>
                           )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(report.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {isDraft && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(report.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -179,6 +206,14 @@ export default function Reports() {
               <p className="text-sm text-gray-500 mt-1">
                 {getClient(selectedReport.clientId)?.name} · {selectedReport.createdAt}
               </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant={statusConfig[selectedReport.status].variant}>
+                  {statusConfig[selectedReport.status].label}
+                </Badge>
+                {selectedReport.sentAt && (
+                  <span className="text-xs text-gray-400">发送于 {selectedReport.sentAt}</span>
+                )}
+              </div>
             </div>
             <div className="prose prose-sm max-w-none">
               <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">
@@ -212,6 +247,66 @@ export default function Reports() {
                   ))}
                 </div>
               </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={showSendModal}
+        onClose={() => setShowSendModal(false)}
+        title="发送报告摘要"
+        size="md"
+      >
+        {selectedReport && (
+          <div className="p-6">
+            {selectedReport.status === 'draft' ? (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-50 flex items-center justify-center">
+                  <AlertCircle className="w-8 h-8 text-amber-500" />
+                </div>
+                <h3 className="text-lg font-medium text-gray-800 mb-2">无法发送草稿报告</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  请先将报告标记为"已完成"后再发送
+                </p>
+                <Button variant="outline" onClick={() => setShowSendModal(false)}>
+                  知道了
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 p-3 bg-gray-50 rounded-xl">
+                  <p className="text-sm text-gray-500 mb-1">发送给</p>
+                  <p className="font-medium text-gray-800">
+                    {getClient(selectedReport.clientId)?.name}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    {getClient(selectedReport.clientId)?.email}
+                  </p>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    发送消息
+                  </label>
+                  <Textarea
+                    value={sendMessage}
+                    onChange={(e) => setSendMessage(e.target.value)}
+                    rows={5}
+                    placeholder="输入要发送给来访者的消息..."
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-3">
+                  <Button variant="ghost" onClick={() => setShowSendModal(false)}>
+                    取消
+                  </Button>
+                  <Button variant="primary" onClick={handleSendConfirm}>
+                    <Send className="w-4 h-4" />
+                    确认发送
+                  </Button>
+                </div>
+              </>
             )}
           </div>
         )}

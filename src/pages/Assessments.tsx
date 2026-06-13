@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { Send, CheckCircle, Clock, AlertCircle, History } from 'lucide-react';
+import { Send, CheckCircle, Clock, AlertCircle, History, Copy, Check, PlayCircle, Link as LinkIcon, AlertTriangle } from 'lucide-react';
 import { useAssessmentStore } from '../store/useAssessmentStore';
 import { useClientStore } from '../store/useClientStore';
 import { ASSESSMENT_TYPES, AssessmentType, Assessment } from '../types';
@@ -20,12 +20,16 @@ const statusConfig = {
 export default function Assessments() {
   const assessments = useAssessmentStore((state) => state.assessments);
   const { clients } = useClientStore();
-  const { sendAssessment } = useAssessmentStore();
+  const { sendAssessment, completeAssessment } = useAssessmentStore();
   const [showSendModal, setShowSendModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [selectedAssessment, setSelectedAssessment] = useState<Assessment | null>(null);
   const [selectedClient, setSelectedClient] = useState('');
   const [selectedType, setSelectedType] = useState('');
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [comparisonClientId, setComparisonClientId] = useState<string>('');
 
   const getClient = (clientId: string) => {
     return clients.find((c) => c.id === clientId);
@@ -48,7 +52,52 @@ export default function Assessments() {
     setShowResultModal(true);
   };
 
+  const handleShowLink = (assessment: Assessment) => {
+    setSelectedAssessment(assessment);
+    setShowLinkModal(true);
+    setCopiedLink(false);
+  };
+
+  const handleCopyLink = () => {
+    if (selectedAssessment) {
+      const link = `https://career-assessment.example.com/take/${selectedAssessment.id}`;
+      navigator.clipboard.writeText(link);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const handleSimulateComplete = () => {
+    if (selectedAssessment) {
+      completeAssessment(selectedAssessment.id);
+      setShowCompleteModal(false);
+      setShowLinkModal(false);
+      setSelectedAssessment(null);
+    }
+  };
+
   const completedAssessments = assessments.filter((a) => a.status === 'completed');
+
+  const clientComparisonAssessments = comparisonClientId
+    ? assessments.filter((a) => a.clientId === comparisonClientId && a.status === 'completed')
+    : [];
+
+  const getComparisonData = () => {
+    if (clientComparisonAssessments.length < 2) return null;
+    
+    const firstResult = clientComparisonAssessments[0].result;
+    const lastResult = clientComparisonAssessments[clientComparisonAssessments.length - 1].result;
+    
+    if (!firstResult || !lastResult) return null;
+
+    return firstResult.scores.map((score, index) => ({
+      name: score.dimension.replace(/[()RISEAC]/g, '').substring(0, 4),
+      首次: score.score,
+      最近: lastResult.scores[index]?.score || 0,
+    }));
+  };
+
+  const comparisonData = getComparisonData();
 
   return (
     <div className="space-y-6">
@@ -102,7 +151,7 @@ export default function Assessments() {
                 <p className="text-sm text-gray-500">暂无测评记录</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-96 overflow-y-auto">
                 {assessments.map((assessment) => {
                   const client = getClient(assessment.clientId);
                   const StatusIcon = statusConfig[assessment.status].icon;
@@ -124,7 +173,7 @@ export default function Assessments() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
                           <Badge
                             variant={statusConfig[assessment.status].color as any}
                             size="sm"
@@ -132,6 +181,15 @@ export default function Assessments() {
                             <StatusIcon className="w-3 h-3 mr-1" />
                             {statusConfig[assessment.status].label}
                           </Badge>
+                          {assessment.status === 'pending' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleShowLink(assessment)}
+                            >
+                              <LinkIcon className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                           {assessment.status === 'completed' && (
                             <Button
                               variant="ghost"
@@ -156,38 +214,64 @@ export default function Assessments() {
         </Card>
       </div>
 
-      {completedAssessments.length > 0 && (
-        <Card>
-          <CardHeader>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <History className="w-5 h-5 text-gray-600" />
               <h2 className="font-semibold text-gray-800">历史对比</h2>
             </div>
-          </CardHeader>
-          <CardContent>
+            <Select
+              value={comparisonClientId}
+              onChange={(e) => setComparisonClientId(e.target.value)}
+              options={[
+                { value: '', label: '选择来访者...' },
+                ...clients.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!comparisonClientId ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">请选择来访者</h3>
+              <p className="text-sm text-gray-500">
+                选择一位来访者查看其测评历史对比
+              </p>
+            </div>
+          ) : clientComparisonAssessments.length < 2 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-50 flex items-center justify-center">
+                <AlertTriangle className="w-8 h-8 text-amber-500" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-800 mb-2">数据不足</h3>
+              <p className="text-sm text-gray-500">
+                {getClient(comparisonClientId)?.name} 至少需要完成2次测评才能进行对比
+              </p>
+              <p className="text-xs text-gray-400 mt-2">
+                当前完成 {clientComparisonAssessments.length} 次测评
+              </p>
+            </div>
+          ) : comparisonData ? (
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={[
-                  { name: '现实型', 首次: 45, 本次: 50 },
-                  { name: '研究型', 首次: 40, 本次: 55 },
-                  { name: '艺术型', 首次: 55, 本次: 60 },
-                  { name: '社会型', 首次: 50, 本次: 52 },
-                  { name: '企业型', 首次: 35, 本次: 48 },
-                  { name: '常规型', 首次: 42, 本次: 45 },
-                ]}>
+                <LineChart data={comparisonData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="name" />
-                  <YAxis />
+                  <YAxis domain={[0, 100]} />
                   <Tooltip />
                   <Legend />
-                  <Line type="monotone" dataKey="首次" stroke="#94a3b8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="本次" stroke="#1e3a5f" strokeWidth={2} />
+                  <Line type="monotone" dataKey="首次" stroke="#94a3b8" strokeWidth={2} strokeDasharray="5 5" />
+                  <Line type="monotone" dataKey="最近" stroke="#1e3a5f" strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : null}
+        </CardContent>
+      </Card>
 
       <Modal
         isOpen={showSendModal}
@@ -230,6 +314,84 @@ export default function Assessments() {
       </Modal>
 
       <Modal
+        isOpen={showLinkModal}
+        onClose={() => setShowLinkModal(false)}
+        title="测评链接"
+        size="md"
+      >
+        {selectedAssessment && (
+          <div className="p-6">
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 mb-1">发送给</p>
+              <p className="font-medium text-gray-800">
+                {getClient(selectedAssessment.clientId)?.name}
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 mb-1">测评名称</p>
+              <p className="font-medium text-gray-800">
+                {selectedAssessment.assessmentType.name}
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 mb-2">测评链接</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={`https://career-assessment.example.com/take/${selectedAssessment.id}`}
+                  readOnly
+                  className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm"
+                />
+                <Button
+                  variant="outline"
+                  onClick={handleCopyLink}
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      已复制
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      复制
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-4">
+              <div className="flex items-start gap-3">
+                <PlayCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <div>
+                  <p className="font-medium text-blue-800 text-sm">模拟完成测评</p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    点击下方按钮可模拟来访者完成测评，自动生成测评结果
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowLinkModal(false)}>
+                关闭
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleSimulateComplete}
+              >
+                <PlayCircle className="w-4 h-4" />
+                模拟完成
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         isOpen={showResultModal}
         onClose={() => setShowResultModal(false)}
         title="测评结果"
@@ -237,6 +399,18 @@ export default function Assessments() {
       >
         {selectedAssessment && selectedAssessment.result && (
           <div className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="font-medium text-gray-800">
+                  {getClient(selectedAssessment.clientId)?.name}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {selectedAssessment.assessmentType.name}
+                </p>
+              </div>
+              <Badge variant="success">已完成</Badge>
+            </div>
+
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="h-72">
                 <h4 className="font-medium text-gray-800 mb-4">测评雷达图</h4>

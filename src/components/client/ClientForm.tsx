@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useClientStore } from '../../store/useClientStore';
 import { Client, Gender, ClientStage } from '../../types';
@@ -27,6 +27,22 @@ export function ClientForm({ initialData, mode }: ClientFormProps) {
     consultationBackground: initialData?.consultationBackground || '',
     currentStage: initialData?.currentStage || 'initial_assessment' as ClientStage,
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name || '',
+        gender: initialData.gender || 'male',
+        age: initialData.age || 25,
+        phone: initialData.phone || '',
+        email: initialData.email || '',
+        occupation: initialData.occupation || '',
+        education: initialData.education || '',
+        consultationBackground: initialData.consultationBackground || '',
+        currentStage: initialData.currentStage || 'initial_assessment',
+      });
+    }
+  }, [initialData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

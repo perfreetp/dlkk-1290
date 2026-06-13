@@ -98,6 +98,7 @@ export interface Report {
   status: ReportStatus;
   createdAt: string;
   updatedAt: string;
+  sentAt?: string;
 }
 
 export interface Task {
