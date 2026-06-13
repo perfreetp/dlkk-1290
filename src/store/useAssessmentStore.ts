@@ -39,27 +39,36 @@ export const useAssessmentStore = create<AssessmentState>()(
       },
 
       completeAssessment: (id) => {
-        set((state) => ({
-          assessments: state.assessments.map((a) =>
-            a.id === id
-              ? {
-                  ...a,
-                  status: 'completed',
-                  completedAt: new Date().toISOString().split('T')[0],
-                  result: {
-                    id: `ar${Date.now()}`,
-                    assessmentId: a.id,
-                    scores: a.assessmentType.dimensions.map((dim) => ({
-                      dimension: dim,
-                      score: Math.floor(Math.random() * 40) + 50,
-                    })),
-                    interpretation: '测评完成，详见详细报告',
-                    createdAt: new Date().toISOString().split('T')[0],
-                  },
-                }
-              : a
-          ),
-        }));
+        set((state) => {
+          const assessment = state.assessments.find(a => a.id === id);
+          if (!assessment) return state;
+          
+          const resultScores = assessment.assessmentType.dimensions.map((dim) => ({
+            dimension: dim,
+            score: Math.floor(Math.random() * 40) + 50,
+          }));
+          
+          const newResult = {
+            id: `ar${Date.now()}`,
+            assessmentId: id,
+            scores: resultScores,
+            interpretation: '测评完成，各维度得分已生成，综合分析详见详细报告',
+            createdAt: new Date().toISOString().split('T')[0],
+          };
+          
+          return {
+            assessments: state.assessments.map((a) =>
+              a.id === id
+                ? {
+                    ...a,
+                    status: 'completed' as const,
+                    completedAt: new Date().toISOString().split('T')[0],
+                    result: newResult,
+                  }
+                : a
+            ),
+          };
+        });
       },
 
       getClientAssessments: (clientId) => {

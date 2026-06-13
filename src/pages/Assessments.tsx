@@ -77,24 +77,14 @@ export default function Assessments() {
   const handleSimulateComplete = () => {
     if (selectedAssessment) {
       completeAssessment(selectedAssessment.id);
-      const updatedAssessment = assessments.find(a => a.id === selectedAssessment.id) || selectedAssessment;
       setShowLinkModal(false);
-      setSelectedAssessment({
-        ...updatedAssessment,
-        status: 'completed',
-        completedAt: new Date().toISOString().split('T')[0],
-        result: {
-          id: `ar${Date.now()}`,
-          assessmentId: selectedAssessment.id,
-          scores: selectedAssessment.assessmentType.dimensions.map((dim) => ({
-            dimension: dim,
-            score: Math.floor(Math.random() * 40) + 50,
-          })),
-          interpretation: '测评完成，详见详细报告',
-          createdAt: new Date().toISOString().split('T')[0],
-        },
-      });
-      setShowResultModal(true);
+      setTimeout(() => {
+        const updatedAssessment = useAssessmentStore.getState().assessments.find(a => a.id === selectedAssessment.id);
+        if (updatedAssessment?.result) {
+          setSelectedAssessment(updatedAssessment);
+          setShowResultModal(true);
+        }
+      }, 100);
     }
   };
 

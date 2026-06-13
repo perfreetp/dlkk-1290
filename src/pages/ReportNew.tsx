@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, X, Star, Trash2, Save, CheckCircle, Edit2 } from 'lucide-react';
+import { ArrowLeft, Plus, X, Star, Trash2, Save, CheckCircle, Edit2, Eye } from 'lucide-react';
 import { useReportStore } from '../store/useReportStore';
 import { useClientStore } from '../store/useClientStore';
 import { Report, CareerRecommendation } from '../types';
@@ -8,6 +8,7 @@ import { Input, Textarea, Select } from '../components/common/Input';
 import { Button } from '../components/common/Button';
 import { Card, CardContent } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
+import { Modal } from '../components/common/Modal';
 
 interface EditableRecommendation extends Omit<CareerRecommendation, 'id'> {
   id: string;
@@ -21,6 +22,8 @@ export default function ReportNew() {
   const { reports, addReport, updateReport } = useReportStore();
   const { clients } = useClientStore();
   const [loading, setLoading] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewReport, setPreviewReport] = useState<Report | null>(null);
 
   const [formData, setFormData] = useState({
     clientId: '',
@@ -171,19 +174,48 @@ export default function ReportNew() {
           careerRecommendations: filteredRecommendations,
           status,
         });
+        const updatedReport = useReportStore.getState().reports.find(r => r.id === existingReport.id);
+        if (updatedReport) {
+          setPreviewReport(updatedReport);
+        }
       } else {
-        addReport({
+        const newReportId = addReport({
           clientId: formData.clientId,
           title: formData.title,
           content: formData.content,
           careerRecommendations: filteredRecommendations,
           status,
         });
+        const savedReport = useReportStore.getState().reports.find(r => r.id === newReportId);
+        if (savedReport) {
+          setPreviewReport(savedReport);
+        }
       }
 
-      navigate('/reports');
       setLoading(false);
+      setShowPreviewModal(true);
     }, 500);
+  };
+
+  const handleClosePreview = () => {
+    setShowPreviewModal(false);
+    setPreviewReport(null);
+    navigate('/reports');
+  };
+
+  const handleBackToEdit = () => {
+    setShowPreviewModal(false);
+    setPreviewReport(null);
+  };
+
+  const getClient = (clientId: string) => {
+    return clients.find((c) => c.id === clientId);
+  };
+
+  const statusConfig = {
+    draft: { label: '草稿', variant: 'warning' as const },
+    completed: { label: '已完成', variant: 'info' as const },
+    sent: { label: '已发送', variant: 'success' as const },
   };
 
   return (
@@ -453,6 +485,73 @@ export default function ReportNew() {
           </Card>
         </div>
       </div>
+
+      <Modal
+        isOpen={showPreviewModal}
+        onClose={handleClosePreview}
+        title="报告预览"
+        size="lg"
+      >
+        {previewReport && (
+          <div className="p-6">
+            <div className="mb-6">
+              <h2 className="text-xl font-bold text-gray-800">{previewReport.title}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                {getClient(previewReport.clientId)?.name} · {previewReport.createdAt}
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant={statusConfig[previewReport.status].variant}>
+                  {statusConfig[previewReport.status].label}
+                </Badge>
+                {previewReport.sentAt && (
+                  <span className="text-xs text-gray-400">发送于 {previewReport.sentAt}</span>
+                )}
+              </div>
+            </div>
+            <div className="prose prose-sm max-w-none">
+              <div className="whitespace-pre-wrap text-sm text-gray-700 leading-relaxed">
+                {previewReport.content}
+              </div>
+            </div>
+            {previewReport.careerRecommendations.length > 0 && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="font-semibold text-gray-800 mb-4">推荐职业方向</h3>
+                <div className="space-y-3">
+                  {previewReport.careerRecommendations.map((rec, index) => (
+                    <div key={rec.id} className="p-4 bg-gray-50 rounded-xl">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-[#1e3a5f] text-white text-xs flex items-center justify-center font-medium">
+                            {index + 1}
+                          </span>
+                          <span className="font-medium text-gray-800">{rec.careerName}</span>
+                        </div>
+                        <Badge variant="success">{rec.matchScore}% 匹配</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-2">{rec.reason}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {rec.explorationTasks.map((task, i) => (
+                          <Badge key={i} size="sm" variant="info">
+                            {task}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-200">
+              <Button variant="outline" onClick={handleBackToEdit}>
+                返回编辑
+              </Button>
+              <Button variant="primary" onClick={handleClosePreview}>
+                完成
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

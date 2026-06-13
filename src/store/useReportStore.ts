@@ -15,7 +15,7 @@ interface ReportState {
   reports: Report[];
   loading: boolean;
   fetchReports: () => void;
-  addReport: (report: NewReportData) => void;
+  addReport: (report: NewReportData) => string;
   updateReport: (id: string, data: Partial<Report>) => void;
   deleteReport: (id: string) => void;
   sendReport: (id: string, summary?: string) => void;
@@ -38,19 +38,21 @@ export const useReportStore = create<ReportState>()(
       },
 
       addReport: (reportData) => {
+        const newReportId = `r${Date.now()}`;
         const newReport: Report = {
           ...reportData,
           careerRecommendations: reportData.careerRecommendations.map((rec) => ({
             ...rec,
             id: `cr${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           })),
-          id: `r${Date.now()}`,
+          id: newReportId,
           createdAt: new Date().toISOString().split('T')[0],
           updatedAt: new Date().toISOString().split('T')[0],
         };
         set((state) => ({
           reports: [...state.reports, newReport],
         }));
+        return newReportId;
       },
 
       updateReport: (id, data) => {
